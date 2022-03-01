@@ -368,14 +368,6 @@ module ActiveRecord
 
       def materialize_transactions
         return if @materializing_transactions
-
-        # As a logical simplification for now, we assume anything that requests
-        # materialization is about to dirty the transaction. Note this is just
-        # an assumption about the caller, not a direct property of this method.
-        # It can go away later when callers are able to handle dirtiness for
-        # themselves.
-        dirty_current_transaction
-
         return unless @has_unmaterialized_transactions
 
         @connection.lock.synchronize do

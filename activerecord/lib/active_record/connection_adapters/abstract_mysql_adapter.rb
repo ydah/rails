@@ -720,11 +720,6 @@ module ActiveRecord
           end
         end
 
-        def retryable_error?(exception)
-          error_number(exception).nil? &&
-            exception.message.match?(/MySQL client is not connected/i)
-        end
-
         def change_column_for_alter(table_name, column_name, type, **options)
           column = column_for(table_name, column_name)
           type ||= column.sql_type
@@ -865,18 +860,14 @@ module ActiveRecord
           StatementPool.new(self.class.type_cast_config_to_integer(@config[:statement_limit]))
         end
 
-        def mismatched_foreign_key(message, sql:, binds:)
+        def mismatched_foreign_key_details(sql)
           match = %r/
             (?:CREATE|ALTER)\s+TABLE\s*(?:`?\w+`?\.)?`?(?<table>\w+)`?.+?
             FOREIGN\s+KEY\s*\(`?(?<foreign_key>\w+)`?\)\s*
             REFERENCES\s*(`?(?<target_table>\w+)`?)\s*\(`?(?<primary_key>\w+)`?\)
           /xmi.match(sql)
 
-          options = {
-            message: message,
-            sql: sql,
-            binds: binds,
-          }
+          options = {}
 
           if match
             options[:table] = match[:table]
@@ -884,6 +875,22 @@ module ActiveRecord
             options[:target_table] = match[:target_table]
             options[:primary_key] = match[:primary_key]
             options[:primary_key_column] = column_for(match[:target_table], match[:primary_key])
+          end
+
+          options
+        end
+
+        def mismatched_foreign_key(message, sql:, binds:)
+          options = {
+            message: message,
+            sql: sql,
+            binds: binds,
+          }
+
+          if sql
+            options.update mismatched_foreign_key_details(sql)
+          else
+            options[:query_parser] = ->(sql) { mismatched_foreign_key_details(sql) }
           end
 
           MismatchedForeignKey.new(**options)
